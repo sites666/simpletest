@@ -11,4 +11,92 @@
           - git
           - MySQL-python
         state: present
- 
+
+    - name: Passage en started et enable des services installés
+      loop:
+         - firewalld
+         - httpd
+         - mariadb
+      systemd:
+        name: '{{ item }}'
+        state: started
+        enabled: yes
+
+        #    - name: configuration des ports ouverts dans firewalld
+        #      command: firewall-cmd --permanent --zone=public --add-port=3306/tcp --add-port=80/tcp
+    - name: configuration des ports ouverts dans firewalld
+      with_items:
+        - 3306/tcp
+        - 80/tcp
+      ansible.posix.firewalld:
+        port: '{{ item }}'
+        permanent: yes
+        state: enabled
+        zone: public
+      notify: Relance firewalld.
+
+    - name: make sure handles are flushed immediately
+      meta: flush_handlers
+
+      #- name: relance firewalld pour prise en compte des changements
+      #systemd:
+      #   name: firewalld
+      #   state: reloaded
+
+# -------- MYSQL ----------
+    - name: Creation DB ecomdb dans mariadb-server
+      mysql_db: db=ecomdb state=present
+      register: db_ecom_created
+
+    - name: Creation user ecomuser dans mariadb-server
+      mysql_user: user=ecomuser password=ecompassword priv=*.*:ALL state=present
+
+    - name: Copy mysql import script file
+      copy:
+        src: files/db-load-script.sql
+        dest: /tmp/db-load-script.sql
+      when: db_ecom_created.changed
+
+#    - name: Import des données dans la base ecombd
+#      shell: mysql  < /tmp/db-load-script.sql
+
+    - name: Import des données dans la base ecombd si base nouvellement créée
+      mysql_db:
+        name: ecomdb
+        state: import
+        target: /tmp/db-load-script.sql
+      when: db_ecom_created.changed
+
+
+#-------- Conf Apache-------
+#    - name: recup des sources via git
+#      shell: git clone https://github.com/kodekloudhub/learning-app-ecommerce.git /var/www/html/
+
+    - name: Check if index.php already exists
+      stat: path=/var/www/html/index.php
+      register: st
+
+    - name: recup des cources via Git dans /var/www/html
+      git:
+        repo: https://github.com/kodekloudhub/learning-app-ecommerce.git
+        dest: /var/www/html/
+        force: yes
+      when: not st.stat.exists
+
+    - name: modif du fichier httpd.conf
+#     shell: sed -i 's/index.html/index.php/g' /etc/httpd/conf/httpd.conf
+      replace:
+        path: /etc/httpd/conf/httpd.conf
+#       regexp: 'index.html'
+#       replace: 'index.php'
+        regexp: '(\s+DirectoryIndex\sindex\.)(.*)$'
+        replace: '\1php'
+        validate: apachectl -f %s -t
+
+
+    - name: modif du fichier index.php
+      # shell: sed -i 's/172.20.1.101/localhost/g' /var/www/html/index.php
+      replace:
+        path: /var/www/html/index.php
+        regexp: '172.20.1.101'
+        replace: 'localhost'

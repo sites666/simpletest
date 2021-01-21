@@ -1,2 +1,7 @@
 ---
 # handlers file for simpletest
+
+    - name: Relance firewalld.
+      systemd:
+         name: firewalld
+         state: reloaded
