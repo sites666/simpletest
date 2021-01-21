@@ -1,2 +1,14 @@
 ---
 # tasks file for simpletest
+    - name: partie install via Yum
+      yum:
+        name:
+          - firewalld
+          - httpd
+          - mariadb-server
+          - php
+          - php-mysqlnd
+          - git
+          - MySQL-python
+        state: present
+ 
